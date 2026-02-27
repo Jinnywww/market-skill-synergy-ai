@@ -7,21 +7,31 @@ from fpdf import FPDF
 import base64
 from datetime import datetime
 
-# --- 1. AI CONFIGURATION (Auto-Fix for 404 Error) ---
-API_KEY = "AIzaSyAtXi1d8UvAtsdOJK5ggH3Tr0GzOYMf_nU"
+# --- 1. AI CONFIGURATION (Final Cloud Fix) ---
+# Secrets ထဲမှာ Key ထည့်ထားရင် အဲဒါကို အရင်ယူမယ်
+API_KEY = st.secrets.get("GEMINI_API_KEY", "AIzaSyAtXi1d8UvAtsdOJK5ggH3Tr0GzOYMf_nU")
 genai.configure(api_key=API_KEY)
 
-# သင့် Key နဲ့ အလုပ်လုပ်တဲ့ Model အမှန်ကို အလိုအလျောက် ရှာဖွေပေးမယ့် Function
 def get_working_model():
     try:
-        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        # gemini-1.5-flash ပါရင် အရင်သုံးမယ်၊ မပါရင် ပထမဆုံးရတဲ့ model ကို သုံးမယ်
-        for m_name in models:
-            if 'gemini-1.5-flash' in m_name:
-                return m_name
-        return models[0] if models else "gemini-pro"
-    except:
-        return "gemini-1.5-flash" # Fallback
+        # လက်ရှိ API Key နဲ့ ရနိုင်တဲ့ Model list ကို ဆွဲထုတ်မယ်
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        # 1.5 Flash ကို အရင်ရှာမယ် (Cloud မှာ models/gemini-1.5-flash လို့ အပြည့်အစုံ ဖြစ်နေတတ်လို့ပါ)
+        for m in available_models:
+            if "gemini-1.5-flash" in m:
+                return m
+        
+        # မရှိရင် Gemini Pro ကို ရှာမယ်
+        for m in available_models:
+            if "gemini-pro" in m:
+                return m
+                
+        # ဘာမှမရှိရင် list ထဲက ပထမဆုံးတစ်ခုကို ယူမယ်
+        return available_models[0] if available_models else "models/gemini-1.5-flash"
+    except Exception as e:
+        # Error တက်ရင် Default format အမှန်ကို fallback သုံးမယ်
+        return "models/gemini-1.5-flash"
 
 WORKING_MODEL = get_working_model()
 
@@ -45,7 +55,6 @@ st.markdown('''
         border-color: #FFFFFF !important;
         background-color: rgba(255, 255, 255, 0.1) !important;
         transform: translateX(10px);
-        box-shadow: 2px 4px 12px rgba(0, 0, 0, 0.2);
     }
     div[data-testid="stMetric"] { background-color: #FFFFFF; padding: 20px; border-radius: 12px; border: 1px solid #E2E8F0; }
     h1 { color: #205781 !important; font-weight: 700 !important; }
@@ -82,7 +91,7 @@ df = load_data()
 
 if df is not None:
     st.sidebar.markdown("<h2 style='color:white;'>Market AI</h2>", unsafe_allow_html=True)
-    st.sidebar.info(f"Active Model: {WORKING_MODEL}") # ဘယ် model သုံးနေလဲ ပြပေးမယ်
+    st.sidebar.info(f"Active Model: {WORKING_MODEL}") 
     
     if 'page' not in st.session_state: st.session_state.page = "Summary"
     
@@ -106,51 +115,28 @@ if df is not None:
 
     elif st.session_state.page == "AI":
         st.title("🤖 AI Career Path Consultant")
-        st.markdown("""
-            #### How can I help you today?
-            Your career roadmap is generated based on **1.2 Million real-world job market associations**.
-            *Try asking:*
-            - *'How to be a Data Scientist?'*
-            - *'What skills should I learn after Python?'*
-            - *'Roadmap for Cloud Engineering'*
-        """)
-        
-        user_msg = st.text_input("Type your career goal or current skill here:", placeholder="e.g. Data Scientist")
+        user_msg = st.text_input("Enter a skill or career goal:", placeholder="e.g. Python or Data Scientist")
         
         if user_msg:
-            with st.spinner("Analyzing market synergy and generating your roadmap..."):
-                # Backend Logic: Search CSV
+            with st.spinner("Analyzing market data..."):
                 relevant = df[df['antecedents'].str.contains(user_msg, case=False, na=False)].head(10)
-                context = relevant.to_string() if not relevant.empty else "General industry standards"
+                context = relevant.to_string() if not relevant.empty else "General knowledge"
                 
                 try:
+                    # အလိုအလျောက်ရှာဖွေထားသော model နာမည်အမှန်ဖြင့် ခေါ်ယူခြင်း
                     model = genai.GenerativeModel(WORKING_MODEL)
-                    # AI ကို Format သေချာချခိုင်းတဲ့ Prompt
-                    prompt = f"""
-                    You are a Professional Career Consultant. 
-                    Based on this Market Data: {context}
-                    User Question: {user_msg}
-                    Please provide a detailed roadmap including:
-                    1. Core Foundation
-                    2. Phase 1: Broadening Skills (High Demand)
-                    3. Phase 2: Specialization (High Lift/Synergy)
-                    4. Potential Job Roles
-                    Use professional formatting with bold text and bullet points.
-                    """
+                    prompt = f"Data: {context}. Question: {user_msg}. Provide a career roadmap with Phases."
                     response = model.generate_content(prompt)
-                    
                     st.markdown("---")
-                    st.markdown("### 🎓 Your Data-Driven Career Roadmap")
-                    st.markdown(response.text) # AI အဖြေကို ပြသခြင်း
-                    
+                    st.info(response.text)
                 except Exception as e:
-                    st.error(f"Connection Error: {e}")
+                    st.error(f"AI Connection Error: {e}")
 
     elif st.session_state.page == "PDF":
         st.title("📄 Generate Report")
-        if st.button("Generate PDF"):
+        if st.button("Download Roadmap PDF"):
             pdf_data = generate_pdf_report(df.head(25), "Market_Report")
             b64 = base64.b64encode(pdf_data).decode()
-            st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="MarketReport.pdf">📥 Download PDF</a>', unsafe_allow_html=True)
+            st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="MarketReport.pdf">📥 Download Now</a>', unsafe_allow_html=True)
 else:
     st.error("Missing File: skill_rules_final.csv not found!")
