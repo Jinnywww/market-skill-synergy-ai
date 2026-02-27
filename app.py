@@ -8,7 +8,7 @@ import base64
 from datetime import datetime
 
 # --- 1. AI CONFIGURATION (Auto-Fix for 404 Error) ---
-API_KEY = "AIzaSyAtXi1d8UvAtsdOJK5ggH3Tr0GzOYMf_nU"
+API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=API_KEY)
 
 # သင့် Key နဲ့ အလုပ်လုပ်တဲ့ Model အမှန်ကို အလိုအလျောက် ရှာဖွေပေးမယ့် Function
@@ -153,4 +153,5 @@ if df is not None:
             b64 = base64.b64encode(pdf_data).decode()
             st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="MarketReport.pdf">📥 Download PDF</a>', unsafe_allow_html=True)
 else:
+
     st.error("Missing File: skill_rules_final.csv not found!")
