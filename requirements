@@ -1,0 +1,6 @@
+streamlit
+pandas
+plotly
+fpdf
+google-generativeai# Virtual Environment ဆောက်ခြင်း
+python -m venv venv
