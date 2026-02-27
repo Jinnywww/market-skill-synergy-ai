@@ -1,46 +1,53 @@
 import streamlit as st
 import pandas as pd
-import google.generativeai as genai
+import plotly.express as px
 import os
+import google.generativeai as genai
+from google.generativeai.types import RequestOptions
 
-# --- 1. API CONFIGURATION (Stable Version) ---
+# --- 1. AI CONFIGURATION (Hardened for Cloud) ---
 API_KEY = st.secrets.get("GEMINI_API_KEY", "AIzaSyAtXi1d8UvAtsdOJK5ggH3Tr0GzOYMf_nU")
 
-# Pro-Tip: API Version ကို v1 လို့ အသေသတ်မှတ်ပြီး Configure လုပ်မယ်
-genai.configure(api_key=API_KEY, transport='rest') 
+# Pro-Tip: API Version ကို v1 လို့ အသေသတ်မှတ်ပေးလိုက်ခြင်း
+genai.configure(api_key=API_KEY)
 
-def get_stable_model():
+def get_ai_response(prompt_text):
     try:
-        # v1 version မှာ ရနိုင်တဲ့ model တွေကို စစ်မယ်
-        models = [m.name for m in genai.list_models()]
+        # v1 version ကို အသုံးပြုဖို့ RequestOptions နဲ့ Force လုပ်မယ်
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
-        # Cloud compatibility အတွက် models/ prefix ကို အမြဲစစ်ပေးမယ်
-        for m in models:
-            if "gemini-1.5-flash" in m:
-                return m
-        return "models/gemini-1.5-flash"
-    except:
-        return "models/gemini-1.5-flash"
+        # API version ကို v1 သို့ ပြောင်းလဲခေါ်ဆိုခြင်း
+        response = model.generate_content(
+            prompt_text,
+            request_options=RequestOptions(api_version='v1')
+        )
+        return response.text
+    except Exception as e:
+        # အကယ်၍ v1 နဲ့ မရရင် v1beta ကို fallback အနေနဲ့ စမ်းမယ်
+        try:
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt_text)
+            return response.text
+        except Exception as e2:
+            return f"AI Connection Error: {e2}"
 
-WORKING_MODEL = get_stable_model()
+# --- 2. PAGE CONFIGURATION ---
+st.set_page_config(page_title="Market Skill Synergy AI", layout="wide")
 
-# --- 2. PAGE STATE MANAGEMENT ---
-# Page တွေ ပျောက်မသွားအောင် session_state ကို သေချာကိုင်တွယ်မယ်
+# --- 3. NAVIGATION & SESSION STATE ---
 if 'page' not in st.session_state:
     st.session_state.page = "Dashboard"
 
-def navigate_to(page):
-    st.session_state.page = page
+def navigate(p):
+    st.session_state.page = p
 
-# --- 3. SIDEBAR NAVIGATION ---
 with st.sidebar:
-    st.title("🚀 Skill AI Pro")
-    st.info(f"Engine: {WORKING_MODEL}")
+    st.title("🛡️ Skill Pro AI")
     st.markdown("---")
-    if st.button("📊 Dashboard"): navigate_to("Dashboard")
-    if st.button("🤖 AI Roadmap"): navigate_to("AI")
+    if st.button("📊 Executive Dashboard"): navigate("Dashboard")
+    if st.button("🤖 AI Career Roadmap"): navigate("AI")
 
-# --- 4. DATA ENGINE ---
+# --- 4. DATA LOADING ---
 @st.cache_data
 def load_data():
     if os.path.exists('skill_rules_final.csv'):
@@ -49,26 +56,23 @@ def load_data():
 
 df = load_data()
 
-# --- 5. APP PAGES ---
+# --- 5. PAGES ---
 if df is not None:
     if st.session_state.page == "Dashboard":
-        st.title("Market Dashboard")
-        st.write("Welcome to your career analytics.")
-        st.dataframe(df.head(10)) # Dashboard content
+        st.title("Market Intelligence Dashboard")
+        st.plotly_chart(px.bar(df.nlargest(10, 'lift'), x='lift', y='consequents', orientation='h'))
         
     elif st.session_state.page == "AI":
-        st.title("🤖 AI Career Assistant")
-        user_input = st.text_input("What is your dream job?")
-        
-        if user_input:
-            try:
-                # model ကို ခေါ်တဲ့အခါ version 'v1' ကို သုံးဖို့ Force လုပ်မယ်
-                model = genai.GenerativeModel(model_name=WORKING_MODEL)
-                response = model.generate_content(f"Create a roadmap for {user_input}")
-                st.markdown(response.text)
-            except Exception as e:
-                # အကယ်၍ 404 ပြန်တက်ရင် API Version ကို ပြောင်းပြီး ထပ်ကြိုးစားမယ်
-                st.error(f"Sync Issue: {e}")
-                st.warning("Tip: Check if your API Key is valid and billing is active on Google Cloud.")
+        st.title("🤖 AI Career Consultant")
+        query = st.text_input("What skill or job role are you looking for?")
+        if query:
+            with st.spinner("Generating professional roadmap..."):
+                # Data matching logic
+                relevant = df[df['antecedents'].str.contains(query, case=False, na=False)].head(5)
+                context = relevant.to_string()
+                
+                # AI Response with v1 Fix
+                answer = get_ai_response(f"Market Data: {context}\nQuestion: {query}\nRoadmap:")
+                st.markdown(answer)
 else:
     st.error("Data file not found!")
